@@ -1,0 +1,13 @@
+// GENERATED FILE - DO NOT EDIT.
+// Produced by CMake from bip39.txt at configure time.
+#pragma once
+#include <cstddef>
+
+namespace bip39 {
+namespace detail {
+inline const char* const kEmbeddedWords[] = {
+@BIP39_WORDLIST_ENTRIES@};
+inline constexpr std::size_t kEmbeddedWordCount = @BIP39_WORDLIST_COUNT@;
+inline constexpr char kEmbeddedHashHex[] = "@BIP39_WORDLIST_SHA256@";
+}  // namespace detail
+}  // namespace bip39
