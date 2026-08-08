@@ -5,10 +5,10 @@
 
 namespace address {
 
-// Addresses derived from a BIP-39 mnemonic at BIP-44 account 0, external
-// chain, first index:
+// Addresses derived from a BIP-39 mnemonic at account 0, external chain,
+// first index:
 //   EVM: m/44'/60'/0'/0/0  (Ethereum, EIP-55 checksummed)
-//   BTC: m/44'/0'/0'/0/0   (Bitcoin P2PKH, compressed pubkey)
+//   BTC: m/84'/0'/0'/0/0   (Bitcoin native SegWit P2WPKH, bech32)
 struct addresses {
   std::string evm;
   std::string btc;

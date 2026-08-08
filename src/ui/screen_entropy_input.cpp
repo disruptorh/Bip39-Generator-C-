@@ -8,16 +8,21 @@
 namespace ui {
 
 // Screen 1: configuration + optional user entropy + always-visible meter.
+// The window fills the viewport so it scales to small airgapped containers
+// and fullscreen windows. Widget order is kept (radios, input, button) so the
+// keyboard-navigation smoke test stays valid.
 void app::render_config_screen() {
   guaranteed_bits_ =
       (word_count_24_ ? entropy::kEntropy24Words : entropy::kEntropy12Words) * 8;
   update_estimate();
 
-  ImGui::SetNextWindowSize(ImVec2(760, 560), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowPos(ImVec2(40, 40), ImGuiCond_FirstUseEver);
+  const ImGuiViewport* vp = ImGui::GetMainViewport();
+  ImGui::SetNextWindowPos(vp->WorkPos, ImGuiCond_Always);
+  ImGui::SetNextWindowSize(vp->WorkSize, ImGuiCond_Always);
 
   if (ImGui::Begin("BIP-39 Seedphrase Generator", nullptr,
-                   ImGuiWindowFlags_NoCollapse)) {
+                   ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+                       ImGuiWindowFlags_NoCollapse)) {
     ImGui::TextWrapped(
         "Aplicacion 100%% offline y airgapped. Se genera UNA semilla por "
         "ejecucion del flujo. Nada se escribe a disco.");
@@ -28,7 +33,8 @@ void app::render_config_screen() {
     const bool w12 = !word_count_24_;
     const bool w24 = word_count_24_;
     if (ImGui::RadioButton("12 palabras (128 bits)", w12)) word_count_24_ = false;
-    ImGui::SameLine();
+    const bool side = ImGui::GetContentRegionAvail().x >= 420.0f;
+    if (side) ImGui::SameLine();
     if (ImGui::RadioButton("24 palabras (256 bits)", w24)) word_count_24_ = true;
 
     ImGui::Spacing();

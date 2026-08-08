@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <string>
 
+#include "address/addresses.hpp"
 #include "bip39/wordlist.hpp"
 #include "clipboard/secure_clipboard.hpp"
 #include "secure_mem/secure_buffer.hpp"
@@ -36,11 +37,22 @@ class app {
   secure_mem::byte_buffer entropy_final_;
   std::size_t guaranteed_bits_ = 128;
   double user_estimate_bits_ = 0.0;
-  bool copied_ = false;
-  std::uint64_t copy_expires_at_ms_ = 0;
   std::string last_error_;
   bip39::wordlist wl_;
   clipboard::secure_clipboard clipboard_;
+
+  // Addresses derived from the revealed mnemonic (BIP-44 account 0 / index 0).
+  address::addresses addresses_;
+
+  // Per-field copy indicator: only the last copied value is shown as active,
+  // matching the single-slot clipboard.
+  struct copy_state {
+    bool active = false;
+    std::uint64_t expires_at_ms = 0;
+  };
+  copy_state copy_mnemonic_;
+  copy_state copy_evm_;
+  copy_state copy_btc_;
 
   static constexpr std::size_t kUserInputCapacity = 4096;
   static constexpr std::uint64_t kClipboardTimeoutMs =
@@ -53,6 +65,12 @@ class app {
   void render_config_screen();
   void render_reveal_screen();
   void render_entropy_meter() const;
+  void render_copy_status(copy_state& item, std::uint64_t now);
+  void render_address_field(const char* label, const std::string& value,
+                            copy_state& item, std::uint64_t now);
+  void begin_copy(copy_state& target, const char* text, std::size_t len,
+                  std::uint64_t now);
+  void poll_copies(std::uint64_t now);
   void update_estimate();
   void generate();
   void reset();

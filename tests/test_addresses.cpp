@@ -8,6 +8,7 @@
 #include <sodium.h>
 
 #include "address/addresses.hpp"
+#include "address/bech32.hpp"
 #include "address/btc.hpp"
 #include "address/evm.hpp"
 #include "bip32/bip32.hpp"
@@ -97,11 +98,11 @@ void check_btc(const char* mnemonic, const char* passphrase,
   bip32::key_pair master = bip32::master_from_seed(seed, sizeof(seed));
   sodium_memzero(seed, sizeof(seed));
 
-  const std::uint32_t path[] = {hardened(44), hardened(0), hardened(0), 0,
+  const std::uint32_t path[] = {hardened(84), hardened(0), hardened(0), 0,
                                 index};
   bip32::key_pair leaf;
   bip32::derive_path(master, path, 5, leaf);
-  check_str(address::btc_p2pkh(leaf.key), expected);
+  check_str(address::btc_p2wpkh(leaf.key), expected);
   sodium_memzero(master.key, sizeof(master.key));
   sodium_memzero(master.chain_code, sizeof(master.chain_code));
   sodium_memzero(leaf.key, sizeof(leaf.key));
@@ -138,6 +139,16 @@ TEST(base58check_vectors) {
   wif[33] = 0x01;
   check_str(crypto::base58check(wif, sizeof(wif)),
             "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn");
+}
+
+TEST(bech32_bip173_vectors) {
+  // Official BIP-173 vector: witness program 0014 751e76e8199196d454941c45d1b3a323f1433bd6.
+  const auto h160 =
+      test_util::from_hex("751e76e8199196d454941c45d1b3a323f1433bd6");
+  check_str(address::bech32_p2wpkh(h160.data()),
+            "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4");
+  check_str(address::bech32_p2wpkh(h160.data(), "tb"),
+            "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx");
 }
 
 TEST(mnemonic_to_seed_vectors) {
@@ -210,8 +221,23 @@ TEST(metamask_hardhat_addresses) {
       "test test test test test test test test test test test junk";
   check_evm(junk, "", 0, "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
   check_evm(junk, "", 1, "0x70997970C51812dc3A010C7d01b50e0d17dc79C8");
-  check_btc(junk, "", 0, "1Ei9UmLQv4o4UJTy5r5mnGFeC9auM3W5P1");
-  check_btc(junk, "", 1, "14RBPsg6mBkLSJokkzeuoCkTtoeD3nK2Kz");
+  check_btc(junk, "", 0, "bc1q4qw42stdzjqs59xvlrlxr8526e3nunw7mp73te");
+  check_btc(junk, "", 1, "bc1qp533522veg9uyhpx3sva9vqrnfzmt262n4lsuq");
+}
+
+TEST(bip84_test_vector_1_btc_address) {
+  // Official BIP-84 test vector 1: seed 000102030405060708090a0b0c0d0e0f,
+  // m/84'/0'/0'/0/0 must yield P2WPKH address bc1qpux3...
+  const auto seed = test_util::from_hex("000102030405060708090a0b0c0d0e0f");
+  bip32::key_pair master =
+      bip32::master_from_seed(seed.data(), seed.size());
+  const std::uint32_t path[] = {hardened(84), hardened(0), hardened(0), 0, 0};
+  bip32::key_pair leaf;
+  bip32::derive_path(master, path, 5, leaf);
+  check_str(address::btc_p2wpkh(leaf.key),
+            "bc1qpux3z758ulsxg69eptaakukraanqwtdxe5yy4c");
+  sodium_memzero(master.key, sizeof(master.key));
+  sodium_memzero(leaf.key, sizeof(leaf.key));
 }
 
 TEST(bip44_test_vector_1_btc_address) {
@@ -233,5 +259,5 @@ TEST(derive_from_mnemonic_integration) {
       "test test test test test test test test test test test junk";
   const address::addresses addr = address::derive_from_mnemonic(junk);
   check_str(addr.evm, "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
-  check_str(addr.btc, "1Ei9UmLQv4o4UJTy5r5mnGFeC9auM3W5P1");
+  check_str(addr.btc, "bc1q4qw42stdzjqs59xvlrlxr8526e3nunw7mp73te");
 }

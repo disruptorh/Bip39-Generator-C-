@@ -123,6 +123,8 @@ add_library(bip39_core STATIC
   src/address/evm.hpp
   src/address/btc.cpp
   src/address/btc.hpp
+  src/address/bech32.cpp
+  src/address/bech32.hpp
   src/address/addresses.cpp
   src/address/addresses.hpp
   ${BIP39_GENERATED_DIR}/bip39/wordlist_data.generated.hpp

@@ -5,6 +5,7 @@
 #include <cstring>
 #include <exception>
 
+#include "address/addresses.hpp"
 #include "bip39/mnemonic.hpp"
 #include "entropy/entropy_estimator.hpp"
 #include "entropy/entropy_mixer.hpp"
@@ -56,10 +57,14 @@ void app::shutdown() {
   entropy_final_.release_and_zero();
   user_input_.release_and_zero();
   user_len_ = 0;
+  addresses_.evm.clear();
+  addresses_.btc.clear();
 }
 
 void app::frame() {
-  clipboard_.poll(now_ms());
+  const std::uint64_t now = now_ms();
+  clipboard_.poll(now);
+  poll_copies(now);
   if (screen_ == screen::config) {
     render_config_screen();
   } else {
@@ -90,6 +95,10 @@ void app::generate() {
     mnemonic_ = bip39::entropy_to_mnemonic(mixed.data(), mixed.size(), wl_);
     entropy_final_ = std::move(mixed);
 
+    // Derive the EVM/BTC addresses for the revealed seed right away so the
+    // reveal screen never triggers a slow/blocking operation.
+    addresses_ = address::derive_from_mnemonic(mnemonic_.c_str());
+
     // The user's contribution has been mixed in; wipe it immediately.
     user_input_.zero();
     user_len_ = 0;
@@ -108,10 +117,37 @@ void app::reset() {
   user_input_.zero();
   user_len_ = 0;
   user_estimate_bits_ = 0.0;
-  copied_ = false;
-  copy_expires_at_ms_ = 0;
+  addresses_.evm.clear();
+  addresses_.btc.clear();
+  copy_mnemonic_.active = false;
+  copy_evm_.active = false;
+  copy_btc_.active = false;
   last_error_.clear();
   screen_ = screen::config;
+}
+
+void app::begin_copy(copy_state& target, const char* text, std::size_t len,
+                     std::uint64_t now) {
+  // The secure clipboard holds exactly one value; only the latest copy is
+  // shown as active so the indicator never lies about what is stored.
+  copy_mnemonic_.active = false;
+  copy_evm_.active = false;
+  copy_btc_.active = false;
+  last_error_.clear();
+  clipboard_.set_text(text, len);
+  if (clipboard_.is_active()) {
+    target.active = true;
+    target.expires_at_ms = now + clipboard_.timeout_ms();
+  } else {
+    last_error_ = "No hay servidor X; no se pudo copiar.";
+  }
+}
+
+void app::poll_copies(std::uint64_t now) {
+  copy_state* items[] = {&copy_mnemonic_, &copy_evm_, &copy_btc_};
+  for (copy_state* item : items) {
+    if (item->active && now >= item->expires_at_ms) item->active = false;
+  }
 }
 
 void app::render_entropy_meter() const {

@@ -96,6 +96,16 @@ int main() {
   io.LogFilename = nullptr;  // never allow ImGui logging to disk
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
   ImGui::StyleColorsDark();
+  ImGuiStyle& style = ImGui::GetStyle();
+  style.WindowRounding = 6.0f;
+  style.FrameRounding = 4.0f;
+  style.ChildRounding = 4.0f;
+  style.WindowPadding = ImVec2(16, 16);
+  style.FramePadding = ImVec2(10, 6);
+  style.ItemSpacing = ImVec2(8, 7);
+  style.WindowTitleAlign = ImVec2(0.5f, 0.5f);
+  style.WindowBorderSize = 1.0f;
+  style.ScrollbarSize = 12.0f;
   load_monospace_font(io);
 
   if (!ImGui_ImplGlfw_InitForOpenGL(window, true)) {
