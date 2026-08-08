@@ -2,6 +2,8 @@
 
 #include <cstring>
 
+#include <sys/select.h>
+
 #include <X11/Xatom.h>
 
 namespace clipboard {
@@ -30,6 +32,10 @@ bool secure_clipboard::init() {
   string_atom_ = XInternAtom(dpy_, "STRING", False);
   text_atom_ = XInternAtom(dpy_, "TEXT", False);
   targets_atom_ = XInternAtom(dpy_, "TARGETS", False);
+  ts_atom_ = XInternAtom(dpy_, "_SECURE_CLIPBOARD_TS", False);
+  // Needed for current_server_time() to receive the PropertyNotify event that
+  // carries the server timestamp.
+  XSelectInput(dpy_, win_, PropertyChangeMask);
   active_ = true;
   return true;
 }
@@ -57,9 +63,45 @@ void secure_clipboard::set_text(const char* text, std::size_t len) {
 }
 
 void secure_clipboard::claim_selection() {
-  XSetSelectionOwner(dpy_, clip_atom_, win_, CurrentTime);
+  // ICCCM: claim the selection with a real server timestamp rather than
+  // CurrentTime. With CurrentTime a concurrent X11 client could win the
+  // selection between our request and the ownership check below; a timestamp
+  // derived from the server's own clock closes that race.
+  const ::Time ts = current_server_time();
+  XSetSelectionOwner(dpy_, clip_atom_, win_, ts);
   owned_ = (XGetSelectionOwner(dpy_, clip_atom_) == win_);
   expires_at_ms_ = 0;  // countdown started by poll() once ownership is settled
+}
+
+::Time secure_clipboard::current_server_time() {
+  // Standard ICCCM technique: perform a zero-length property change on our own
+  // window; the server stamps the resulting PropertyNotify with the current
+  // time. Bounded wait so a wedged server degrades to CurrentTime instead of
+  // blocking the UI indefinitely.
+  XChangeProperty(dpy_, win_, ts_atom_, XA_INTEGER, 32, PropModeReplace,
+                  nullptr, 0);
+  XFlush(dpy_);
+  const int fd = ConnectionNumber(dpy_);
+  for (int i = 0; i < 10; ++i) {
+    while (XPending(dpy_) > 0) {
+      XEvent ev;
+      XNextEvent(dpy_, &ev);
+      if (ev.type == PropertyNotify && ev.xproperty.window == win_ &&
+          ev.xproperty.atom == ts_atom_) {
+        return ev.xproperty.time;
+      }
+      // Selection events must not be dropped while waiting.
+      handle_event(ev);
+    }
+    fd_set rfds;
+    FD_ZERO(&rfds);
+    FD_SET(fd, &rfds);
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = 2000;  // 2 ms
+    if (select(fd + 1, &rfds, nullptr, nullptr, &tv) <= 0) break;
+  }
+  return CurrentTime;
 }
 
 void secure_clipboard::clear_now() {

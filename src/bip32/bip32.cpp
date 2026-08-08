@@ -17,8 +17,31 @@ constexpr char kSaltPrefix[] = "mnemonic";
 constexpr std::uint32_t kPbkdf2Iterations = 2048;
 
 const secp256k1_context* context() {
-  static const secp256k1_context* ctx = secp256k1_context_create(
-      SECP256K1_CONTEXT_NONE);
+  // C++11 function-local statics guarantee thread-safe one-time
+  // initialization, so concurrent first calls cannot race.
+  static const secp256k1_context* ctx = [] {
+    // Current libsecp256k1 API: SECP256K1_CONTEXT_NONE is the only
+    // non-deprecated flag and yields a context sufficient for ALL library
+    // functionality (the historical SIGN/VERIFY flags were removed upstream
+    // and are treated as equivalent to NONE). secp256k1_context_static is NOT
+    // suitable here: it forbids secret-key operations such as
+    // secp256k1_ec_pubkey_create used below.
+    secp256k1_context* c = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    if (c == nullptr) {
+      throw std::runtime_error("secp256k1: context allocation failed");
+    }
+    // Randomize the context as recommended by the library docs for secret-key
+    // operations (side-channel hardening for the pubkey derivations).
+    std::uint8_t seed[32];
+    randombytes_buf(seed, sizeof(seed));
+    if (secp256k1_context_randomize(c, seed) != 1) {
+      sodium_memzero(seed, sizeof(seed));
+      secp256k1_context_destroy(c);
+      throw std::runtime_error("secp256k1: context randomization failed");
+    }
+    sodium_memzero(seed, sizeof(seed));
+    return c;
+  }();
   return ctx;
 }
 
@@ -29,6 +52,9 @@ void hmac_sha512(const std::uint8_t* key, std::size_t key_len,
   crypto_auth_hmacsha512_init(&st, key, key_len);
   crypto_auth_hmacsha512_update(&st, data, data_len);
   crypto_auth_hmacsha512_final(&st, out);
+  // The state holds the expanded master/child key material; wipe it before it
+  // leaves scope.
+  sodium_memzero(&st, sizeof(st));
 }
 bool is_zero(const std::uint8_t bytes[32]) {
   for (int i = 0; i < 32; ++i) {
@@ -39,14 +65,26 @@ bool is_zero(const std::uint8_t bytes[32]) {
 
 }  // namespace
 
+void mnemonic_to_seed(const secure_mem::secure_string& mnemonic,
+                      const char* passphrase, std::uint8_t seed[64]) {
+  mnemonic_to_seed(mnemonic.c_str(), passphrase, seed);
+}
+
 void mnemonic_to_seed(const char* mnemonic, const char* passphrase,
                       std::uint8_t seed[64]) {
   const std::size_t m_len = std::strlen(mnemonic);
   const std::size_t p_len = (passphrase != nullptr) ? std::strlen(passphrase)
                                                      : 0;
   const std::size_t salt_len = sizeof(kSaltPrefix) - 1 + p_len;
-  // Salt buffer on the stack, wiped before returning.
+  // Salt buffer on the stack. The RAII guard wipes the whole buffer on every
+  // exit path, including the case where pbkdf2_hmac_sha512 throws: the BIP-39
+  // passphrase must never survive on the stack.
   std::uint8_t salt[sizeof(kSaltPrefix) - 1 + 256];
+  struct salt_guard {
+    std::uint8_t* ptr;
+    std::size_t len;
+    ~salt_guard() { sodium_memzero(ptr, len); }
+  } guard{salt, sizeof(salt)};
   if (salt_len > sizeof(salt)) {
     throw std::invalid_argument("passphrase too long");
   }
@@ -56,7 +94,6 @@ void mnemonic_to_seed(const char* mnemonic, const char* passphrase,
   crypto::pbkdf2_hmac_sha512(
       reinterpret_cast<const std::uint8_t*>(mnemonic), m_len, salt, salt_len,
       kPbkdf2Iterations, seed, 64);
-  sodium_memzero(salt, salt_len);
 }
 
 key_pair master_from_seed(const std::uint8_t* seed, std::size_t seed_len) {

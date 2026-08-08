@@ -1,5 +1,6 @@
 #include "entropy/entropy_mixer.hpp"
 
+#include <cassert>
 #include <cstring>
 #include <stdexcept>
 
@@ -14,6 +15,8 @@ secure_mem::byte_buffer random_bytes(std::size_t n) {
 secure_mem::byte_buffer mix(const std::uint8_t* os_entropy, std::size_t os_len,
                             const char* user, std::size_t user_len,
                             std::size_t out_len) {
+  assert(os_entropy != nullptr || os_len == 0);
+  assert(user != nullptr || user_len == 0);
   secure_mem::byte_buffer ikm(os_len + user_len);
   if (os_len != 0) std::memcpy(ikm.data(), os_entropy, os_len);
   if (user_len != 0) std::memcpy(ikm.data() + os_len, user, user_len);
@@ -38,6 +41,12 @@ secure_mem::byte_buffer mix(const std::uint8_t* os_entropy, std::size_t os_len,
 
   sodium_memzero(prk, sizeof(prk));
   return out;
+}
+
+secure_mem::byte_buffer mix(const secure_mem::byte_buffer& os_entropy,
+                            const char* user, std::size_t user_len,
+                            std::size_t out_len) {
+  return mix(os_entropy.data(), os_entropy.size(), user, user_len, out_len);
 }
 
 }  // namespace entropy

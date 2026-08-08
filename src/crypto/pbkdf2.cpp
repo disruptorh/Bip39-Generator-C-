@@ -10,7 +10,9 @@ namespace {
 
 // HMAC-SHA512 via libsodium. libsodium implements the full RFC 2104
 // (a key longer than the 128-byte block is hashed down first). The streaming
-// API is used so an arbitrary-length key is supported.
+// API is used so an arbitrary-length key is supported. The HMAC state holds
+// the expanded key material (the PBKDF2 password / BIP-39 mnemonic) and MUST
+// be wiped before returning.
 void hmac_sha512(std::uint8_t out[64], const std::uint8_t* key,
                  std::size_t key_len, const std::uint8_t* data,
                  std::size_t data_len) {
@@ -18,6 +20,7 @@ void hmac_sha512(std::uint8_t out[64], const std::uint8_t* key,
   crypto_auth_hmacsha512_init(&st, key, key_len);
   crypto_auth_hmacsha512_update(&st, data, data_len);
   crypto_auth_hmacsha512_final(&st, out);
+  sodium_memzero(&st, sizeof(st));
 }
 
 }  // namespace
@@ -47,6 +50,7 @@ void pbkdf2_hmac_sha512(const std::uint8_t* password, std::size_t pass_len,
     crypto_auth_hmacsha512_update(&state, salt, salt_len);
     crypto_auth_hmacsha512_update(&state, block_be, 4);
     crypto_auth_hmacsha512_final(&state, u);
+    sodium_memzero(&state, sizeof(state));  // state holds the expanded password
     std::memcpy(t, u, sizeof(t));
 
     for (std::uint32_t i = 1; i < iterations; ++i) {

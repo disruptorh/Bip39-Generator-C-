@@ -14,6 +14,9 @@ namespace ui {
 
 // Global application state. All sensitive material lives in mlock'ed,
 // auto-zeroed secure buffers; the destructor and reset() wipe everything.
+// All shared state is private and only reachable through the narrow public
+// interface (init/shutdown/frame) and the member functions that render the
+// screens.
 class app {
  public:
   app() = default;
@@ -28,6 +31,13 @@ class app {
 
   // Render one frame of the active screen.
   void frame();
+
+  // Last error message from the most recent operation (empty on success).
+  const std::string& last_error() const { return last_error_; }
+
+ private:
+  enum class screen { config, reveal };
+  screen screen_ = screen::config;
 
   // Shared state (used by the screen implementations).
   bool word_count_24_ = false;
@@ -57,10 +67,6 @@ class app {
   static constexpr std::size_t kUserInputCapacity = 4096;
   static constexpr std::uint64_t kClipboardTimeoutMs =
       clipboard::secure_clipboard::kDefaultTimeoutMs;
-
- private:
-  enum class screen { config, reveal };
-  screen screen_ = screen::config;
 
   void render_config_screen();
   void render_reveal_screen();

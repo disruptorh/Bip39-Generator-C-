@@ -3,6 +3,8 @@
 
 #include <string>
 
+#include "secure_mem/secure_buffer.hpp"
+
 namespace address {
 
 // Addresses derived from a BIP-39 mnemonic at account 0, external chain,
@@ -14,6 +16,12 @@ struct addresses {
   std::string btc;
 };
 
+// Preferred: the mnemonic must live in mlock'ed secure memory (secure_string).
+addresses derive_from_mnemonic(const secure_mem::secure_string& mnemonic,
+                               const char* passphrase = "");
+
+// Raw-pointer overload kept for test vectors (compile-time string literals).
+// Do not pass a std::string holding a real seed phrase.
 addresses derive_from_mnemonic(const char* mnemonic,
                                const char* passphrase = "");
 

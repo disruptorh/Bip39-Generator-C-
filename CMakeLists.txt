@@ -155,6 +155,8 @@ add_executable(bip39_generator
   src/main.cpp
   src/clipboard/secure_clipboard.cpp
   src/clipboard/secure_clipboard.hpp
+  src/security/seccomp.cpp
+  src/security/seccomp.hpp
   src/ui/app.cpp
   src/ui/app.hpp
   src/ui/screen_entropy_input.cpp

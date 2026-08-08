@@ -58,6 +58,9 @@ class buffer {
     if (np != nullptr) {
       if (preserve && ptr_ != nullptr) {
         const std::size_t keep = (n < size_) ? n : size_;
+        // Zero the whole new region first so the tail beyond the copied bytes
+        // never carries uninitialized heap data, then copy the preserved data.
+        std::memset(np, 0, n * sizeof(T));
         std::memcpy(np, ptr_, keep * sizeof(T));
       } else {
         std::memset(np, 0, n * sizeof(T));

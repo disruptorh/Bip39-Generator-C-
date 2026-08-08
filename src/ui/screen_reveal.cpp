@@ -6,6 +6,8 @@
 
 #include <imgui.h>
 
+#include <sodium.h>
+
 #include "entropy/entropy_estimator.hpp"
 #include "entropy/entropy_mixer.hpp"
 
@@ -47,6 +49,9 @@ void app::render_address_field(const char* label, const std::string& value,
   }
   ImGui::PopID();
   render_copy_status(item, now);
+  // The address is derived from the seed phrase; wipe the stack copy before
+  // returning so it cannot be read later from /proc/<pid>/mem or a debugger.
+  sodium_memzero(buf, sizeof(buf));
 }
 
 // Screen 2: revealed mnemonic + derived EVM/BTC addresses, each with its own

@@ -4,6 +4,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "secure_mem/secure_buffer.hpp"
+
 namespace bip32 {
 
 // A 256-bit private key plus its BIP-32 chain code.
@@ -16,6 +18,16 @@ struct key_pair {
 // salt "mnemonic" + passphrase). The mnemonic is assumed to be ASCII (the
 // English wordlist is pure ASCII, so NFKD normalization is the identity).
 // Passphrase may be empty. `seed` must point to 64 bytes.
+//
+// Preferred overload: `mnemonic` must live in mlock'ed secure memory
+// (secure_mem::secure_string). Taking the type by reference enforces at the
+// API level that a real seed phrase can never be held in a plain std::string.
+void mnemonic_to_seed(const secure_mem::secure_string& mnemonic,
+                      const char* passphrase, std::uint8_t seed[64]);
+
+// Raw-pointer overload kept for test vectors (compile-time string literals).
+// The caller MUST pass a mnemonic that resides in secure memory; do not feed
+// it a std::string holding a real seed phrase.
 void mnemonic_to_seed(const char* mnemonic, const char* passphrase,
                       std::uint8_t seed[64]);
 

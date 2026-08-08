@@ -54,6 +54,9 @@ class secure_clipboard {
 
  private:
   void claim_selection();
+  // ICCCM-recommended way to obtain the current X11 server timestamp (see
+  // claim_selection). Returns CurrentTime only on timeout.
+  ::Time current_server_time();
   void handle_event(XEvent& ev);
   void handle_selection_request(XEvent& ev);
   void handle_selection_clear();
@@ -68,6 +71,7 @@ class secure_clipboard {
   Atom string_atom_ = 0;
   Atom text_atom_ = 0;
   Atom targets_atom_ = 0;
+  Atom ts_atom_ = 0;
 
   secure_mem::byte_buffer buffer_;
   std::size_t len_ = 0;

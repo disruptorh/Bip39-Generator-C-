@@ -89,15 +89,16 @@ void app::generate() {
     secure_mem::byte_buffer os_entropy = entropy::random_bytes(bytes);
 
     secure_mem::byte_buffer mixed = entropy::mix(
-        os_entropy.data(), os_entropy.size(), user_input_.data(), user_len_, bytes);
+        os_entropy, user_input_.data(), user_len_, bytes);
     os_entropy.release_and_zero();  // OS entropy consumed by the HKDF extractor
 
     mnemonic_ = bip39::entropy_to_mnemonic(mixed.data(), mixed.size(), wl_);
     entropy_final_ = std::move(mixed);
 
     // Derive the EVM/BTC addresses for the revealed seed right away so the
-    // reveal screen never triggers a slow/blocking operation.
-    addresses_ = address::derive_from_mnemonic(mnemonic_.c_str());
+    // reveal screen never triggers a slow/blocking operation. The secure_string
+    // overload enforces that the mnemonic is derived from mlock'ed memory.
+    addresses_ = address::derive_from_mnemonic(mnemonic_);
 
     // The user's contribution has been mixed in; wipe it immediately.
     user_input_.zero();
@@ -166,6 +167,15 @@ void app::render_entropy_meter() const {
                          user_estimate_bits_);
     } else {
       ImGui::TextDisabled("Aporte del usuario: sin aporte adicional");
+    }
+
+    ImGui::Separator();
+    ImGui::TextUnformatted("Wordlist:");
+    if (wl_.from_embedded()) {
+      ImGui::TextDisabled("  embebida en el binario (SHA-256 verificada)");
+    } else {
+      ImGui::TextColored(ImVec4(0.55f, 0.85f, 0.55f, 1.0f),
+                         "  externa (SHA-256 verificada)");
     }
   }
   ImGui::EndChild();

@@ -13,6 +13,7 @@
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
 
+#include "security/seccomp.hpp"
 #include "ui/app.hpp"
 
 namespace {
@@ -56,6 +57,11 @@ void load_monospace_font(ImGuiIO& io) {
 int main() {
   disable_core_dumps();
   disable_gpu_shader_caches();
+
+  // Runtime syscall filter: blocks AF_INET/AF_INET6 socket() at the kernel
+  // level (LD_PRELOAD / shared-library vector). Installed before any GL/X11
+  // initialization. AF_UNIX stays allowed for the local display server.
+  (void)security::install_seccomp_filter();
 
   if (sodium_init() < 0) {
     std::fprintf(stderr, "FATAL: libsodium failed to initialize\n");
@@ -126,7 +132,7 @@ int main() {
 
   ui::app app;
   if (!app.init()) {
-    std::fprintf(stderr, "FATAL: %s\n", app.last_error_.c_str());
+    std::fprintf(stderr, "FATAL: %s\n", app.last_error().c_str());
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();

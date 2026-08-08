@@ -1,0 +1,34 @@
+# AppArmor profile for the airgapped BIP-39 seedphrase generator.
+#
+# Install (as root):
+#   install -m 644 packaging/bip39_generator.apparmor \
+#       /etc/apparmor.d/bip39_generator
+#   apparmor_parser -r /etc/apparmor.d/bip39_generator
+#
+# This is defense-in-depth on top of the in-process seccomp filter
+# (src/security/seccomp.cpp): seccomp blocks AF_INET/AF_INET6 socket()
+# creation, AppArmor additionally denies every network syscall path and
+# constrains file access.
+#include <tunables/global>
+
+profile bip39_generator /usr/local/bin/bip39_generator {
+  #include <abstractions/base>
+  #include <abstractions/opengl>
+
+  # Local display servers (X11 / Wayland) are reached via AF_UNIX sockets;
+  # only local access is permitted.
+  /tmp/.X*              r,
+  /run/user/*/wayland-* rw,
+  /run/user/*/wayland-0 rw,
+
+  # Optional external wordlist next to the binary (verified by SHA-256).
+  /usr/local/bin/bip39.txt r,
+  @{HOME}/bip39.txt     r,
+
+  # No read/write elsewhere and no network, ever.
+  /{,usr/}bin/**        mr,
+  /lib{,32,64}/**       mr,
+  /usr/lib{,32,64}/**   mr,
+
+  deny network,
+}
