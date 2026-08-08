@@ -11,7 +11,7 @@
 /README.local.md
 docs/internal/
 *.internal.md
-
+/tests
 # ===========================================================================
 # Secrets & key material (never commit real keys, seeds or passphrases)
 # ===========================================================================
