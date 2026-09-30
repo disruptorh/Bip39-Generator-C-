@@ -109,13 +109,6 @@ std::string render(const std::vector<entry>& entries, const report_meta& meta) {
   append_labeled(out, " Generado (UTC)", kLabelWidth, meta.timestamp_utc);
   append_labeled(out, " Direcciones", kLabelWidth,
                  "EVM m/44'/60'/0'/0/0   BTC m/84'/0'/0'/0/0");
-  out += "\n En este archivo la SEMILLA de cada entrada esta OBFUSCADA; solo se\n";
-  out += " recupera en claro con la contrasena correcta en BIP-39 Obfuscator.\n";
-  out += "\n Las direcciones EVM/BTC son las de la semilla REAL (la ya de-ofuscada),\n";
-  out += " es decir, las que mostrara tu cartera al importar la semilla recuperada.\n";
-  out += "\n Para recuperar las semillas: abre BIP-39 Obfuscator, selecciona el\n";
-  out += " modo \"V1 SHA-256 (Legacy)\" y usa la MISMA contrasena con la que\n";
-  out += " se exporto este archivo. Sin ella no se pueden recuperar.\n";
   out += kRule;
   out += "\n\n";
 
