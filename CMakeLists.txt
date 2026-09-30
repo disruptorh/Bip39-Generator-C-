@@ -117,6 +117,12 @@ add_library(bip39_core STATIC
   src/crypto/base58.hpp
   src/crypto/pbkdf2.cpp
   src/crypto/pbkdf2.hpp
+  src/crypto/kdf.cpp
+  src/crypto/kdf.hpp
+  src/crypto/seed_transformer.cpp
+  src/crypto/seed_transformer.hpp
+  src/export/batch_export.cpp
+  src/export/batch_export.hpp
   src/bip32/bip32.cpp
   src/bip32/bip32.hpp
   src/address/evm.cpp
@@ -161,6 +167,7 @@ add_executable(bip39_generator
   src/ui/app.hpp
   src/ui/screen_entropy_input.cpp
   src/ui/screen_reveal.cpp
+  src/ui/screen_batch.cpp
   ${IMGUI_DIR}/imgui.cpp
   ${IMGUI_DIR}/imgui_draw.cpp
   ${IMGUI_DIR}/imgui_tables.cpp
@@ -200,6 +207,7 @@ if(BIP39_BUILD_TESTS)
     tests/test_secure_buffer.cpp
     tests/test_wordlist.cpp
     tests/test_addresses.cpp
+    tests/test_batch_export.cpp
   )
   target_include_directories(bip39_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/tests

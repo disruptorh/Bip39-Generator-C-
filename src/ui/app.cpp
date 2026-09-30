@@ -1,14 +1,18 @@
 #include "ui/app.hpp"
 
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <vector>
 
 #include "address/addresses.hpp"
 #include "bip39/mnemonic.hpp"
+#include "crypto/seed_transformer.hpp"
 #include "entropy/entropy_estimator.hpp"
 #include "entropy/entropy_mixer.hpp"
+#include "export/batch_export.hpp"
 
 #include <imgui.h>
 
@@ -39,6 +43,15 @@ bool app::init() {
     }
   }
   user_input_.resize(kUserInputCapacity);
+  batch_password_.resize(kBatchInputCapacity);
+  export_dir_.resize(kExportPathCapacity);
+  export_name_.resize(kExportPathCapacity);
+  // Default destination: the user's home directory.
+  if (const char* home = std::getenv("HOME");
+      home != nullptr && home[0] != '\0') {
+    std::snprintf(export_dir_.data(), kExportPathCapacity, "%s", home);
+  }
+  sync_default_export_name();
   if (!clipboard_.init()) {
     last_error_ = "No hay servidor X disponible; el portapapeles estará desactivado.";
   } else {
@@ -56,9 +69,13 @@ void app::shutdown() {
   mnemonic_.wipe();
   entropy_final_.release_and_zero();
   user_input_.release_and_zero();
+  batch_password_.release_and_zero();
+  export_dir_.release_and_zero();
+  export_name_.release_and_zero();
   user_len_ = 0;
   addresses_.evm.clear();
   addresses_.btc.clear();
+  batch_export::wipe(export_status_);
 }
 
 void app::frame() {
@@ -109,6 +126,115 @@ void app::generate() {
   } catch (const std::exception& e) {
     last_error_ = e.what();
   }
+}
+
+void app::sync_default_export_name() {
+  if (export_name_custom_) return;
+  const std::string name = batch_export::default_filename(batch_count_);
+  std::snprintf(export_name_.data(), kExportPathCapacity, "%s", name.c_str());
+}
+
+// Batch export: generate `batch_count_` seeds, obfuscate each one with the
+// user's password (legacy XOR-with-derived-key, as BIP-39 Obfuscator does) and
+// write the obfuscated mnemonic plus its derived addresses to a .txt file.
+//
+// Memory discipline: the plaintext mnemonic and the raw entropy of each seed
+// are wiped as soon as the obfuscated form exists, so at most one plaintext
+// seed is ever resident. The obfuscated seeds themselves live in ordinary
+// heap strings because they are the payload being written to a plaintext file;
+// they are wiped once the file is on disk.
+void app::generate_batch() {
+  const std::size_t bytes =
+      word_count_24_ ? entropy::kEntropy24Words : entropy::kEntropy12Words;
+  guaranteed_bits_ = bytes * 8;
+
+  const char* dir_raw = export_dir_.data();
+  const char* name_raw = export_name_.data();
+  const char* password = batch_password_.data();
+  const std::string dir = (dir_raw != nullptr) ? dir_raw : "";
+  const std::string name = (name_raw != nullptr) ? name_raw : "";
+
+  if (password == nullptr || password[0] == '\0') {
+    last_error_ = "Escribe la contrasena con la que se obfuscaran las semillas.";
+    return;
+  }
+  const std::string invalid =
+      batch_export::validate(batch_count_, dir, name);
+  if (!invalid.empty()) {
+    last_error_ = invalid;
+    return;
+  }
+
+  const std::string path = batch_export::join_path(dir, name);
+  if (batch_export::file_exists(path) && !export_overwrite_pending_) {
+    // Never clobber a previous export silently: demand a second, explicit
+    // confirmation from the user.
+    export_overwrite_pending_ = true;
+    last_error_ = "El archivo '" + name +
+                  "' ya existe en esa carpeta. Vuelve a pulsar el boton para "
+                  "sobrescribirlo.";
+    return;
+  }
+  export_overwrite_pending_ = false;
+  export_status_.clear();
+
+  std::vector<batch_export::entry> entries;
+  std::string content;
+  try {
+    entries.reserve(static_cast<std::size_t>(batch_count_));
+    for (int i = 0; i < batch_count_; ++i) {
+      secure_mem::byte_buffer os_entropy = entropy::random_bytes(bytes);
+      secure_mem::byte_buffer mixed = entropy::mix(
+          os_entropy, user_input_.data(), user_len_, bytes);
+      os_entropy.release_and_zero();
+
+      secure_mem::secure_string plain =
+          bip39::entropy_to_mnemonic(mixed.data(), mixed.size(), wl_);
+      mixed.release_and_zero();
+
+      // Addresses belong to the REAL seed: the one the user recovers by
+      // de-obfuscating with the password. Those are the addresses the wallet
+      // will show once the recovered seed is imported. Only the mnemonic that
+      // goes into the file is obfuscated.
+      const address::addresses addr = address::derive_from_mnemonic(plain);
+
+      crypto::TransformParams params;
+      params.seed_phrase = plain.c_str();
+      params.secret = password;
+      params.kdf_version = crypto::KdfVersion::V1_SHA256;
+      secure_mem::secure_string obfuscated =
+          crypto::transform_seed(params, wl_);
+      plain.wipe();  // Plaintext no longer needed.
+
+      entries.push_back({std::string(obfuscated.c_str()), addr.evm, addr.btc});
+      obfuscated.wipe();
+    }
+
+    batch_export::report_meta meta;
+    meta.word_count = word_count_24_ ? 24U : 12U;
+    meta.entropy_bits = bytes * 8;
+    meta.timestamp_utc = batch_export::utc_timestamp();
+    content = batch_export::render(entries, meta);
+    batch_export::write_atomic(path, content);
+
+    export_status_ = std::to_string(batch_count_) +
+                     (batch_count_ == 1 ? " semilla exportada a "
+                                         : " semillas exportadas a ") +
+                     path;
+    last_error_.clear();
+  } catch (const std::exception& e) {
+    last_error_ = std::string("No se pudo exportar: ") + e.what();
+  }
+
+  batch_export::wipe(content);
+  for (batch_export::entry& item : entries) {
+    batch_export::wipe(item.seed);
+    item.evm.clear();
+    item.btc.clear();
+  }
+  // The user's contribution has been mixed into every seed of the batch.
+  user_input_.zero();
+  user_len_ = 0;
 }
 
 void app::reset() {

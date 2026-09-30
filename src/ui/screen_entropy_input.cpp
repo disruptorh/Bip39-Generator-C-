@@ -24,9 +24,24 @@ void app::render_config_screen() {
                    ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
                        ImGuiWindowFlags_NoCollapse)) {
     ImGui::TextWrapped(
-        "Aplicacion 100%% offline y airgapped. Se genera UNA semilla por "
-        "ejecucion del flujo. Nada se escribe a disco.");
+        "Aplicacion 100%% offline y airgapped. Puedes generar UNA semilla que se "
+        "muestra en pantalla, o exportar un lote de varias semillas ya "
+        "obfuscadas a un archivo .txt.");
     ImGui::Separator();
+    ImGui::Spacing();
+
+    ImGui::TextUnformatted("Modo de generacion:");
+    if (ImGui::RadioButton("Una semilla (se muestra en pantalla)",
+                           mode_ == mode::single)) {
+      mode_ = mode::single;
+      last_error_.clear();
+    }
+    if (ImGui::RadioButton("Varias semillas (exportar .txt obfuscado)",
+                           mode_ == mode::batch)) {
+      mode_ = mode::batch;
+      last_error_.clear();
+      export_overwrite_pending_ = false;  // Confirmation is per-target-path
+    }
     ImGui::Spacing();
 
     ImGui::TextUnformatted("Longitud de la semilla:");
@@ -49,15 +64,19 @@ void app::render_config_screen() {
     }
     ImGui::TextDisabled("La estimacion del aporte se muestra abajo.");
 
-    ImGui::Spacing();
-    ImGui::Spacing();
-    if (ImGui::Button("Generar semilla", ImVec2(-1, 0))) {
-      generate();
-    }
+    if (mode_ == mode::single) {
+      ImGui::Spacing();
+      ImGui::Spacing();
+      if (ImGui::Button("Generar semilla", ImVec2(-1, 0))) {
+        generate();
+      }
 
-    if (!last_error_.empty()) {
-      ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "%s",
-                         last_error_.c_str());
+      if (!last_error_.empty()) {
+        ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "%s",
+                           last_error_.c_str());
+      }
+    } else {
+      render_batch_panel();
     }
 
     ImGui::Spacing();

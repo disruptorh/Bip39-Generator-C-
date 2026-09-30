@@ -59,9 +59,11 @@ key() { xdotool key --window "$WID" "$1"; sleep 0.25; }
 getclip() { timeout 3 xclip -selection clipboard -o 2>/dev/null; }
 
 # ---------------------------------------------------------------------------
-# Config screen: Tab to "Generar semilla" (radios, input, button = 4 widgets).
+# Config screen: Tab to "Generar semilla". Focus order is
+# [modo x2, longitud x2, entropia, boton]: nothing is focused on appear, so
+# 6 Tabs reach the button.
 # ---------------------------------------------------------------------------
-for _ in 1 2 3 4; do key Tab; done
+for _ in 1 2 3 4 5 6; do key Tab; done
 key Return
 sleep 1.5
 
@@ -130,4 +132,63 @@ if [ "$NFILES" -ne 0 ]; then
 fi
 
 echo "E2E PASS: generate -> copy seed -> copy EVM/BTC -> auto-clear -> no persistence"
+
+# ---------------------------------------------------------------------------
+# Batch export: "Generar varias semillas" -> 6 seeds -> 6seeds.txt in $HOME,
+# obfuscated, each with its EVM + BTC address.
+#
+# Runs on a fresh instance so keyboard navigation starts from a known widget
+# (the first mode radio). Focus order on the config screen becomes
+# [modo x2, longitud x2, entropia, cantidad, contrasena, carpeta, nombre, boton].
+# ---------------------------------------------------------------------------
+kill "$APP" 2>/dev/null; wait "$APP" 2>/dev/null
+./build/bip39_generator >>/tmp/opencode/e2e_app.log 2>&1 &
+APP=$!
+sleep 2.5
+WID=$(xdotool search --name "BIP-39 Seedphrase Generator" | head -1)
+if [ -z "$WID" ]; then
+  echo "BATCH FAIL: window not found"; exit 1
+fi
+xdotool windowactivate "$WID" 2>/dev/null; xdotool windowfocus "$WID" 2>/dev/null
+sleep 0.5
+
+# Nothing is focused on appear, so 2 Tabs reach "Varias semillas"; Return
+# selects it.
+key Tab
+key Tab
+key Return
+sleep 0.5
+
+# 3 Tabs -> "Entropia adicional" input, 1 more -> the seed-count input.
+for _ in 1 2 3 4; do key Tab; done
+key BackSpace          # clear the default 5
+xdotool type --window "$WID" --delay 60 "6"
+sleep 0.5
+
+key Tab                # password
+xdotool type --window "$WID" --delay 60 "clave-de-prueba"
+sleep 0.5
+# Directory ($HOME) and file name ("6seeds.txt") are already defaulted.
+for _ in 1 2 3; do key Tab; done   # password -> dir -> name -> button
+key Return
+sleep 4
+
+BATCH_FILE="$HOME/6seeds.txt"
+if [ ! -f "$BATCH_FILE" ]; then
+  echo "BATCH FAIL: $BATCH_FILE was not created"; ls -la "$HOME"; exit 1
+fi
+SEEDS=$(grep -c "SEMILLA" "$BATCH_FILE")
+if [ "$SEEDS" -ne 6 ]; then
+  echo "BATCH FAIL: expected 6 seeds in the report, found $SEEDS"; exit 1
+fi
+EVM=$(grep -cE "^ +EVM +: 0x[0-9a-fA-F]{40}$" "$BATCH_FILE")
+BTC=$(grep -cE "^ +BTC +: bc1q[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{38}$" "$BATCH_FILE")
+if [ "$EVM" -ne 6 ] || [ "$BTC" -ne 6 ]; then
+  echo "BATCH FAIL: expected 6 EVM + 6 BTC addresses, found $EVM/$BTC"; exit 1
+fi
+if ! grep -q "V1 SHA-256" "$BATCH_FILE"; then
+  echo "BATCH FAIL: report does not name the KDF"; exit 1
+fi
+echo "BATCH ok: $BATCH_FILE with $SEEDS obfuscated seeds, $EVM EVM, $BTC BTC"
+echo "E2E PASS: batch export -> 6seeds.txt (6 seeds + addresses, KDF V1 SHA-256)"
 exit 0
